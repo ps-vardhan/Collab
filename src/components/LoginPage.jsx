@@ -23,11 +23,8 @@ import {
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createRoom, joinRoom } from "../api";
-// import { login, register } from "../api";
 
 const LoginPage = () => {
-  // const [isLogin, setIsLogin] = useState(true);
-  // const [formData, setFormData] = useState({ username: "", password: "" });
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
@@ -37,95 +34,130 @@ const LoginPage = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [createdRoomData, setCreatedRoomData] = useState(null);
 
-  // const handleSubmit = async () => {
-  //   try {
-  //     const { data } = isLogin
-  //       ? await login(formData)
-  //       : await register(formData);
-  //     if (isLogin) {
-  //       localStorage.setItem("token", data.token);
-  //       localStorage.setItem("user", JSON.stringify(data.user));
-  //       toast({ title: "Login Sucessful", status: "success" });
-  //       navigate("/dashboard");
-  //     } else {
-  //       toast({ title: "Register! Sucessful", status: "success" });
-  //       setIsLogin(true);
-  //     }
-  //   } catch (err) {
-  //     toast({
-  //       title: "Error",
-  //       description: err.response?.data?.msg || "something went wrong",
-  //       status: "error",
-  //     });
-  //   }
-  // };
-
-  const saveUserAndRedirect = (rId) => {
+  const saveUserAndRedirect = async (rId) => {
     if (!username.trim()) {
       toast({ title: "Please enter your Display Name", status: "warning" });
       return;
     }
-    // Save minimal "User" object for the Editor to read
-    const mockUser = { username, id: Date.now().toString() };
-    localStorage.setItem("user", JSON.stringify(mockUser));
+
+    try {
+      await getRoom(rId);
+    } catch (err) {
+      toast({
+        title: "Invalid Room",
+        description: "This room does not exist or has expired.",
+        status: "error",
+      });
+      return;
+    }
+
+    let userId;
+    try {
+      const { data } = await getUser(username);
+      userId = data.id;
+    } catch (err) {
+      userId = Date.now().toString();
+    }
+
+    const user = { username, id: userId };
+    localStorage.setItem("user", JSON.stringify(user));
 
     navigate(`/editor/${rId}`);
   };
 
   const handleJoin = async () => {
     if (!roomId) return;
-    // saveUserAndRedirect(roomId);
     if (!password) {
       toast({ title: "Password Required", status: "warning" });
       return;
     }
     try {
       await joinRoom({ roomId, password });
-      localStorage.setItem("current_room_pass",password);
+      localStorage.setItem("current_room_pass", password);
       saveUserAndRedirect(roomId);
-
     } catch (err) {
-      toast({
-        title: "Access Denied",
-        description: "Invalid Credentionals",
-        status: "error",
-      });
+        const status = err.response?.status;
+      const msg = err.response?.data?.msg;
+      
+      if (status === 404) {
+        toast({
+          title: "Room Not Found",
+          description: "No room exists with that Id.Check and try again.",
+          status: "error",
+        });
+      } else if (status === 401) {
+        toast({
+          title: "Access Denied",
+          description: "Incorrect password for this room.",
+          status: "error",
+        });
+      } else {
+        toast({
+          title: "Access Denied",
+          description: msg || "Invalid Credentials",
+          status: "error",
+        });
     }
   };
 
   const handleCreate = async () => {
-    // Generate a unique Room ID
-    // const id = "room-" + Date.now();
-    // saveUserAndRedirect(id);
     if (!username) {
       toast({ title: "Name required", status: "warning" });
+      return;
+    }
+    if (!password) {
+      toast({ title: "Password Required", status: "warning" });
       return;
     }
     try {
       const { data } = await createRoom({
         name: newRoomName || "Untitled",
-        // password,
         owner: username,
       });
       setCreatedRoomData({
         roomId: data.roomId,
         passwordKey: data.passwordKey,
       });
-      // saveUserAndRedirect(data.roomId);
+
+      toast({
+        title: "Room Created!",
+        description: `Your Room ID is ${data.roomId}. Share it with your Team.`,
+        status: "success",
+        duration: 5000,
+        isClosable:true,
+      });
       onOpen();
     } catch (err) {
-      toast({ title: "Error creating room", status: "error" });
+      if (!err.response) {
+        toast({
+          title: "Network Error",
+          description: "Cannot reach the server. Check your Connection.",
+          status: "error",
+        });
+      } else {
+        const serverMsg = err.response?.data?.error || "Something went Wrong.";
+        toast({
+          title: "Error Creating Room",
+          description: serverMsg,
+          status: "error",
+        });
+      }
     }
   };
 
   const enterRoom = () => {
     if (createdRoomData) {
-      localStorage.setItem("current_room_pass",createdRoomData.passwordKey);
-      
+      localStorage.setItem("current_room_pass", createdRoomData.passwordKey);
+      toast({
+        title: "Entering Room...",
+        status: "success",
+        duration: 1500,
+      });
+
       saveUserAndRedirect(createdRoomData.roomId);
     }
   };
-  
+
   return (
     <Box
       height="100vh"
@@ -151,15 +183,8 @@ const LoginPage = () => {
         <Text color="gray.400" fontSize="sm" textAlign="center">
           Create Joint, Secure Sessions.
         </Text>
-
-        {/* <Input
-          placeholder="UserName"
-          onChange={(e) =>
-            setFormData({ ...formData, username: e.target.value })
-          }
-        /> */}
         <Input
-          placeholder="Display Name"
+          placeholder="Enter Your Name"
           size="lg"
           bg="gray.800"
           border="none"
@@ -167,17 +192,6 @@ const LoginPage = () => {
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
-
-        {/* <Button colorScheme="blue" width="100%" onClick={handleSubmit}>
-          {isLogin ? "Login" : "Register"}
-        </Button>
-        <Text
-          cursor="pointer"
-          color="blue.400"
-          onClick={() => setIsLogin(!isLogin)}>
-          {isLogin ? "Need an account?" : "Already have one?"}
-        </Text> */}
-
         <Tabs isFitted variant="soft-rounded" colorScheme="purple" width="100%">
           <TabList mb="1.5em" bg="gray.800" borderRadius="full" p={1}>
             <Tab
@@ -193,11 +207,10 @@ const LoginPage = () => {
           </TabList>
 
           <TabPanels>
-            {/* Join Panel */}
             <TabPanel px={0} py={0}>
               <VStack spacing={4}>
                 <Input
-                  placeholder="Paste Room ID (e.g. room-123)"
+                  placeholder="Enter Room ID "
                   size="md"
                   bg="gray.800"
                   border="none"
@@ -206,7 +219,7 @@ const LoginPage = () => {
                 />
 
                 <Input
-                  placeholder="Room Password"
+                  placeholder="Enter Room Password"
                   type="password"
                   size="md"
                   bg="gray.800"
@@ -224,32 +237,32 @@ const LoginPage = () => {
                 </Button>
               </VStack>
             </TabPanel>
-            {/* Create Panel */}
+
             <TabPanel px={0} py={0}>
               <VStack spacing={4}>
                 <Input
-                  placeholder="Meeting Name (Optional)"
+                  placeholder="Enter Meeting Name"
                   size="md"
                   bg="gray.800"
                   border="none"
                   value={newRoomName}
                   onChange={(e) => setNewRoomName(e.target.value)}
                 />
-                {/* <Input
-                  placeholder="Password Key"
+                <Input
+                  placeholder="Enter Password"
                   type="password"
                   size="md"
                   bg="gray.800"
                   border="none"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                /> */}
+                />
                 <Button
                   colorScheme="purple"
                   width="100%"
                   size="lg"
                   onClick={handleCreate}
-                  isDisabled={!username}>
+                  isDisabled={!username || !newRoomName || !password}>
                   Start New Session
                 </Button>
               </VStack>
