@@ -22,14 +22,7 @@ import {
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  createRoom,
-  getRoom,
-  getUser,
-  joinRoom,
-  login,
-  register,
-} from "../api";
+import { createRoom, getRoom, joinRoom, login, register } from "../api";
 
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -46,6 +39,10 @@ const LoginPage = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [createdRoomData, setCreatedRoomData] = useState(null);
 
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => !!localStorage.getItem("token"),
+  );
+
   const handleSubmit = async () => {
     try {
       const { data } = isLogin
@@ -55,7 +52,7 @@ const LoginPage = () => {
       if (isLogin) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
-
+        setIsAuthenticated(true);
         toast({ title: "Login Successful", status: "success" });
       } else {
         toast({
@@ -63,6 +60,7 @@ const LoginPage = () => {
           status: "success",
         });
         setIsLogin(true);
+        setAuthPassword("");
       }
     } catch (err) {
       const msg = err.response?.data?.msg || "Something went Wrong";
@@ -70,12 +68,15 @@ const LoginPage = () => {
     }
   };
 
-  const saveUserAndRedirect = async (rId) => {
-    if (!username.trim()) {
-      toast({ title: "Please enter Display Name", status: "warning" });
-      return;
-    }
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setIsAuthenticated(false);
+    setAuthUsername("");
+    setAuthPassword("");
+  };
 
+  const saveUserAndRedirect = async (rId) => {
     try {
       await getRoom(rId);
     } catch (err) {
@@ -87,17 +88,16 @@ const LoginPage = () => {
       return;
     }
 
-    let userId;
-    try {
-      const { data } = await getUser(username);
-      userId = data.id;
-    } catch (err) {
-      userId = Date.now().toString();
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+      toast({
+        title: "Session expired",
+        description: "Please log in again.",
+        status: "error",
+      });
+      handleLogout();
+      return;
     }
-
-    const user = { username, id: userId };
-    localStorage.setItem("user", JSON.stringify(user));
-
     navigate(`/editor/${rId}`);
   };
 
@@ -120,7 +120,6 @@ const LoginPage = () => {
       saveUserAndRedirect(roomId);
     } catch (err) {
       const status = err.response?.status;
-      const msg = err.response?.data?.msg;
 
       if (status === 404) {
         toast({
@@ -151,27 +150,18 @@ const LoginPage = () => {
   };
 
   const handleCreate = async () => {
-    if (!username.trim()) {
-      toast({ title: "Name required", status: "warning" });
-      return;
-    }
-    if (!password) {
-      toast({
-        title: "Password Required",
-        description: "Set a Password for your room",
-        status: "warning",
-      });
-      return;
-    }
+    const storedUser = JSON.parse(localStorage.getItem.getItem("user"));
+    const owner = storedUser?.username || "Unknown";
+
     try {
       const { data } = await createRoom({
         name: newRoomName || "Untitled",
-        password,
-        owner: username.trim(),
+        owner,
       });
+
       setCreatedRoomData({
         roomId: data.roomId,
-        passwordKey: password,
+        passwordKey: data.passwordKey,
       });
 
       toast({
@@ -242,126 +232,138 @@ const LoginPage = () => {
         </Heading>
 
         <Text color="gray.400" fontSize="sm" textAlign="center">
-          Create Joint, Secure Sessions.
+          {isAuthenticated
+            ? `Logged in as ${JSON.parse(localStorage.getItem("user"))?.username}`
+            : "Create Joint, Secure Sessions."}
         </Text>
-        <VStack spacing={3} width="100%">
-          <Input
-            placeholder="Account Username"
-            size="md"
-            bg="gray.800"
-            border="none"
-            _focus={{ border: "1px solid #7928CA" }}
-            value={authUsername}
-            onChange={(e) => setAuthUsername(e.target.value)}
-          />
-          <Input
-            placeholder="Account Password"
-            type="password"
-            size="md"
-            bg="gray.800"
-            border="none"
-            _focus={{ border: "1px solid #7928CA" }}
-            value={authPassword}
-            onChange={(e) => setAuthPassword(e.target.value)}
-          />
-          <Button colorScheme="blue" width="100%" onClick={handleSubmit}>
-            {isLogin ? "Login" : "Register"}
-          </Button>
-          <Text
-            cursor="pointer"
-            color="blue.400"
-            fontSize="sm"
-            onClick={() => setIsLogin(!isLogin)}>
-            {isLogin ? "Need an account? Register" : "Already have one?Login"}
-          </Text>
-        </VStack>
 
-        <Input
-          placeholder="Display Name (shown in editor)"
-          size="lg"
-          bg="gray.800"
-          _focus={{ border: "1px solid #7928CA" }}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
+        {!isAuthenticated && (
+          <VStack spacing={3} width="100%">
+            <Input
+              placeholder="Username"
+              size="md"
+              bg="gray.800"
+              border="none"
+              _focus={{ border: "1px solid #7928CA" }}
+              value={authUsername}
+              onChange={(e) => setAuthUsername(e.target.value)}
+            />
+            <Input
+              placeholder="Password"
+              type="password"
+              size="md"
+              bg="gray.800"
+              border="none"
+              _focus={{ border: "1px solid #7928CA" }}
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+            />
+            <Button colorScheme="blue" width="100%" onClick={handleSubmit}>
+              {isLogin ? "Login" : "Register"}
+            </Button>
+            <Text
+              cursor="pointer"
+              color="blue.400"
+              fontSize="sm"
+              onClick={() => setIsLogin(!isLogin)}>
+              {isLogin ? "Need an account?" : "Already have an account?"}
+            </Text>
+          </VStack>
+        )}
 
-        <Tabs isFitted variant="soft-rounded" colorScheme="purple" width="100%">
-          <TabList mb="1.5em" bg="gray.800" borderRadius="full" p={1}>
-            <Tab
-              color="gray.400"
-              _selected={{ color: "white", bg: "purple.600" }}>
-              Join Session
-            </Tab>
-            <Tab
-              color="gray.400"
-              _selected={{ color: "white", bg: "purple.600" }}>
-              Create Session
-            </Tab>
-          </TabList>
-
-          <TabPanels>
-            <TabPanel px={0} py={0}>
-              <VStack spacing={4}>
-                <Input
-                  placeholder="Paste Room ID (e.g. A3F9C2)"
-                  size="md"
-                  bg="gray.800"
-                  border="none"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                />
-
-                <Input
-                  placeholder="Room Password"
-                  type="password"
-                  size="md"
-                  bg="gray.800"
-                  border="none"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <Button
-                  colorScheme="purple"
-                  width="100%"
-                  size="lg"
-                  onClick={handleJoin}
-                  isDisabled={!roomId || !username}>
+        {isAuthenticated && (
+          <>
+            <Tabs
+              isFitted
+              variant="soft-rounded"
+              colorScheme="purple"
+              width="100%">
+              <TabList mb="1.5em" bg="gray.800" borderRadius="full" p={1}>
+                <Tab
+                  color="gray.400"
+                  _selected={{ color: "white", bg: "purple.600" }}>
                   Join Session
-                </Button>
-              </VStack>
-            </TabPanel>
+                </Tab>
+                <Tab
+                  color="gray.400"
+                  _selected={{ color: "white", bg: "purple.600" }}>
+                  Create Session
+                </Tab>
+              </TabList>
 
-            <TabPanel px={0} py={0}>
-              <VStack spacing={4}>
-                <Input
-                  placeholder="Meeting Name (Optional)"
-                  size="md"
-                  bg="gray.800"
-                  border="none"
-                  value={newRoomName}
-                  onChange={(e) => setNewRoomName(e.target.value)}
-                />
-                <Input
-                  placeholder="Set a Room Password"
-                  type="password"
-                  size="md"
-                  bg="gray.800"
-                  border="none"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <Button
-                  colorScheme="purple"
-                  width="100%"
-                  size="lg"
-                  onClick={handleCreate}
-                  isDisabled={!username}>
-                  Start New Session
-                </Button>
-              </VStack>
-            </TabPanel>
-          </TabPanels>
-        </Tabs>
+              <TabPanels>
+                <TabPanel px={0} py={0}>
+                  <VStack spacing={4}>
+                    <Input
+                      placeholder="Paste Room ID (e.g. A3F9C2)"
+                      size="md"
+                      bg="gray.800"
+                      border="none"
+                      value={roomId}
+                      onChange={(e) => setRoomId(e.target.value)}
+                    />
+
+                    <Input
+                      placeholder="Room Password"
+                      type="password"
+                      size="md"
+                      bg="gray.800"
+                      border="none"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <Button
+                      colorScheme="purple"
+                      width="100%"
+                      size="lg"
+                      onClick={handleJoin}
+                      isDisabled={!roomId || !username}>
+                      Join Session
+                    </Button>
+                  </VStack>
+                </TabPanel>
+                <TabPanel px={0} py={0}>
+                  <VStack spacing={4}>
+                    <Input
+                      placeholder="Meeting Name (Optional)"
+                      size="md"
+                      bg="gray.800"
+                      border="none"
+                      value={newRoomName}
+                      onChange={(e) => setNewRoomName(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Set a Room Password"
+                      type="password"
+                      size="md"
+                      bg="gray.800"
+                      border="none"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <Button
+                      colorScheme="purple"
+                      width="100%"
+                      size="lg"
+                      onClick={handleCreate}
+                      isDisabled={!username}>
+                      Start New Session
+                    </Button>
+                  </VStack>
+                </TabPanel>
+              </TabPanels>
+            </Tabs>
+
+            <Button
+              variant="ghost"
+              colorScheme="red"
+              size="sm"
+              width="100%"
+              onClick={handleLogout}>
+              Log Out
+            </Button>
+          </>
+        )}
       </VStack>
 
       <Modal isOpen={isOpen} onClose={onClose} closeOnOverlayClick={false}>
