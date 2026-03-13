@@ -3,23 +3,9 @@ const router = express.Router();
 const Room = require("../models/Room");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const jwt = require("jsonwebtoken");
+const requireAuth = require("../middleware/auth");
 
-const requireAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer")) {
-    return res.status(401).json({ msg: "No token provided. Access denied." });
-  }
-
-  const token = authHeader.split(" ")[1];
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (err) {
-    return res.status(401).json({ msg: "Invalid or expired token." });
-  }
-};
+const ROOM_MEMBER_LIMIT = 50;
 
 const generateId = (length) =>
   crypto.randomBytes(6).toString("hex").toUpperCase();
@@ -34,13 +20,22 @@ router.post("/", requireAuth, async (req, res) => {
     }
 
     const passwordKey = generateId(3);
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(passwordKey, salt);
+    const hashedPassword = await bcrypt.hash(passwordKey, 10);
 
-    const newRoom = new Room({ roomId, name: name || "Untitled", password: hashedPassword, owner });
-    await newRoom.save();
+    const newRoom = await Room.create({
+      roomId,
+      name: name || "Untitled",
+      password: hashedPassword,
+      owner: req.user.id,
+      members: [req.user.id],
+    });
 
-    res.json({ msg: "Room Created", roomId, passwordKey });
+    res.json({
+      msg: "Room Created",
+      roomId: room.roomId,
+      passwordKey,
+      name: room.name,
+    });
   } catch (err) {
     console.error("Create Error:", err);
     res.status(500).json({ error: err.message });
@@ -49,6 +44,11 @@ router.post("/", requireAuth, async (req, res) => {
 
 router.post("/join", requireAuth, async (req, res) => {
   const { roomId, password } = req.body;
+
+  if (!roomId || !password) {
+    return res.status(400).json({ msg: "roomId and password are required." });
+  }
+
   try {
     const room = await Room.findOne({ roomId });
 
@@ -57,20 +57,58 @@ router.post("/join", requireAuth, async (req, res) => {
     const isMatch = await bcrypt.compare(password, room.password);
     if (!isMatch) return res.status(401).json({ msg: "Invalid Password" });
 
-    res.json({ msg: "Acess Granted", roomId: room.roomId });
+    const alreadyMember = room.members.some(
+      (id) => id.equals(req.user.id)
+    );
+
+    if (!alreadyMember && room.members.length >= ROOm_MEMBER_LIMIT) {
+      return res.status(403).json({
+        msg: `Room is full. MAximum ${ROOM_MEMBER_LIMIT} members allowed.`,
+      });
+    }
+
+    await Room.updateOne(
+      { roomId },
+      { $addToSet: { members: req.user.id } }
+    );
+
+    res.json({ msg: "Acess Granted", roomId: room.roomId, name: room.name });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
-    const room = await Room.findOne({ roomId: req.params.roomId });
-    if (!room) return res.status(404).json({ msg: "Room not found" });
-    res.json({ roomId: room.roomId, name: room.name });
+    const rooms = await Room.findOne({ roomId: req.params.roomId })
+      .select("roomID name owner createdAt")
+      .populate("owner", "username");
+
+    res.json(rooms);
   } catch (err) {
     res.status(500).json({ error: err.mesage });
   }
 });
 
+router.get("/:roomId", requireAuth, async (req, res) => {
+  try {
+    const room = await Room.findOne({ roomId: req.params.roomId })
+      .populate("owner", "useranme")
+      .populate("members", "username");
+
+    if (!room) return res.status(404).json({ msg: "Room not found." });
+
+    res.json({
+      roomId: room.roomId,
+      name: room.name,
+      owner: room.owner,
+      members: room.members,
+      memberCount: room.members.length,
+      isFull: room.members.length >= ROOM_MEMBER_LIMIT,
+      createdAt: room.createdAt,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = router;
