@@ -1,28 +1,66 @@
 const Y = require('yjs')
 const syncProtocol = require('y-protocols/sync')
 const awarenessProtocol = require('y-protocols/awareness')
+const YjsDocument = require('./models/YjsDocument')
 
 const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
-const persistenceDir = process.env.YPERSISTENCE
 
-let persistence = null
-if (persistenceDir != null) {
-  console.info('Persisting documents to "' + persistenceDir + '"')
-  // const LeveldbPersistence = require('y-leveldb').LeveldbPersistence
-  const ldb = null // new LeveldbPersistence(persistenceDir)
-  persistence = {
-    provider: ldb,
-    bindState: async (docName, ydoc) => {
-      // const persistedYdoc = await ldb.getYDoc(docName)
-      // const newUpdates = Y.encodeStateAsUpdate(ydoc)
-      // ldb.storeUpdate(docName, newUpdates)
-      // Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
-      // ydoc.on('update', update => {
-      //   ldb.storeUpdate(docName, update)
-      // })
-    },
-    writeState: async (docName, ydoc) => {}
-  }
+const persistence = {
+
+  bindState: async (docName, ydoc) => {
+    try {
+      const stored = await YjsDocument.findOne({ docName })
+
+      if (stored && stored.state) {
+        Y.applyUpdate(ydoc, new Uint8Array(stored.state))
+        console.info(`[Yjs] Restored state for the doc:${docName} (${stored.state.length} bytes)`)
+      } else {
+        console.info(`[Yjs] No prior state found for doc: ${docName}- starting fresh`)
+      }
+
+      ydoc.on('update', async (update) => {
+        try {
+          const current = await YjsDocument.findOne({ docName })
+
+          if (current) {
+            const mergeDoc = new Y.Doc()
+            Y.applyUpdate(mergeDoc, new Uint8Array(current.state))
+            Y.applyUpdate(mergeDoc, update)
+            const merged = Y.encodeStateAsUpdate(mergeDoc)
+            mergeDoc.destroy()
+
+            await YjsDocument.updateOne(
+              { docName },
+              { $set: { state: Buffer.from(merged) } }
+            )
+          } else {
+            await YjsDocument.create({
+              docName,
+              state: Buffer.from(Y.encodeStateAsUpdate(ydoc)),
+            })
+          }
+        } catch (err) {
+          console.error(`[Yjs] Incremental update error [${docName}]:`, err.mesage)
+        }
+      })
+    } catch (err) {
+      console.error(`[Yjs] bindState error [${docName}]:`, err.message)
+    }
+  },
+
+  writeState: async (docName, ydoc) => {
+    try {
+      const finalState = Buffer.from(Y.encodeStateAsUpdate(ydoc))
+      await YjsDocument.findOneAndUpdate(
+        { docName },
+        { $set: { state: finalState } },
+        { upsert: true }
+      )
+      console.info(`[Yjs] Final snapshot written for doc:${docName}(${finalState.length} bytes)`)
+    } catch (err) {
+      console.error(`[Yjs] writeState error [${docName}]:`, err.message)
+    }
+  },
 }
 
 /**
@@ -51,7 +89,7 @@ class WSSharedDoc extends Y.Doc {
   /**
    * @param {string} name
    */
-  constructor (name) {
+  constructor(name) {
     super({ gc: gcEnabled })
     this.name = name
     /**
@@ -85,6 +123,39 @@ class WSSharedDoc extends Y.Doc {
   }
 }
 
+const encoding = require('lib0/encoding')
+const decoding = require('lib0/decoding')
+const map = require('lib0/map')
+
+const send = (doc, conn, m) => {
+  if (conn.readyState !== 1 || !doc.conns.has(conn)) {
+    closeConn(doc, conn)
+  }
+  try {
+    conn.send(m, err => { if (err != null) closeConn(doc, conn) })
+  } catch (e) {
+    closeConn(doc, conn)
+  }
+}
+
+const closeConn = (doc, conn) => {
+  if (doc.conns.has(conn)) {
+    /**
+     * @type {Set<number>}
+     */
+    const controlledIds = doc.conns.get(conn)
+    doc.conns.delete(conn)
+    awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null)
+    if (doc.conns.size === 0 && persistence !== null) {
+      // if persisted, we deconstruct the doc
+      persistence.writeState(doc.name, doc).then(() => {
+        doc.destroy()
+      })
+      docs.delete(doc.name)
+    }
+  }
+  conn.close()
+}
 /**
  * Gets a Y.Doc by name, creating it if it doesn't exist.
  * @param {string} docname
@@ -175,36 +246,3 @@ exports.setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[
   }
 }
 
-const encoding = require('lib0/encoding')
-const decoding = require('lib0/decoding')
-const map = require('lib0/map')
-
-const send = (doc, conn, m) => {
-  if (conn.readyState !== 1 || !doc.conns.has(conn)) {
-    closeConn(doc, conn)
-  }
-  try {
-    conn.send(m, err => { if (err != null) closeConn(doc, conn) })
-  } catch (e) {
-    closeConn(doc, conn)
-  }
-}
-
-const closeConn = (doc, conn) => {
-  if (doc.conns.has(conn)) {
-    /**
-     * @type {Set<number>}
-     */
-    const controlledIds = doc.conns.get(conn)
-    doc.conns.delete(conn)
-    awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null)
-    if (doc.conns.size === 0 && persistence !== null) {
-      // if persisted, we deconstruct the doc
-      persistence.writeState(doc.name, doc).then(() => {
-        doc.destroy()
-      })
-      docs.delete(doc.name)
-    }
-  }
-  conn.close()
-}
