@@ -32,9 +32,9 @@ router.post("/", requireAuth, async (req, res) => {
 
     res.json({
       msg: "Room Created",
-      roomId: room.roomId,
+      roomId: newRoom.roomId,
       passwordKey,
-      name: room.name,
+      name: newRoom.name,
     });
   } catch (err) {
     console.error("Create Error:", err);
@@ -61,7 +61,7 @@ router.post("/join", requireAuth, async (req, res) => {
       (id) => id.equals(req.user.id)
     );
 
-    if (!alreadyMember && room.members.length >= ROOm_MEMBER_LIMIT) {
+    if (!alreadyMember && room.members.length >= ROOM_MEMBER_LIMIT) {
       return res.status(403).json({
         msg: `Room is full. MAximum ${ROOM_MEMBER_LIMIT} members allowed.`,
       });
