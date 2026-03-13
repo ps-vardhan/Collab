@@ -16,9 +16,9 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
   // const [language, setLanguage] = useState("Select Language");
   const editorRef = useRef();
 
-  const [outputHeight, setOutputHeight] = useState(60);
+  const [outputWidth, setOutputWidth] = useState(350);
   const [isDragging, setIsDragging] = useState(false);
-  const [isOutputOpen, setIsOutputOpen] = useState(false);
+  const [isOutputOpen, setIsOutputOpen] = useState(true);
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState([]);
 
@@ -29,9 +29,6 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
     editor.focus();
 
     if (!doc || !provider) return;
-
-    // const doc = new Y.Doc();
-    // const provider = new WebsocketProvider("ws://localhost:5000", roomId, doc);
 
     const type = doc.getText("monaco");
 
@@ -67,9 +64,9 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
 
   const resize = (e) => {
     if (isDragging) {
-      const newHeight = window.innerHeight - e.clientY;
-      if (newHeight > 50 && newHeight < window.innerHeight * 0.5) {
-        setOutputHeight(newHeight);
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 150 && newWidth < window.innerWidth * 0.7) {
+        setOutputWidth(newWidth);
       }
     }
   };
@@ -104,7 +101,7 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
     if (!editorRef.current) return;
 
     setIsOutputOpen(true);
-    if (outputHeight < 200) setOutputHeight(250);
+    if (outputWidth < 200) setOutputWidth(300);
 
     const sourceCode = editorRef.current.getValue();
     if (!sourceCode) return;
@@ -123,26 +120,7 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
   }));
 
   return (
-    <Box height="100%" display="flex" flexDirection="column" overflow="hidden">
-      {/* <Box minHeight="0" flex="1" display="flex" flexDirection="column">
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          pr={4}>
-          <LanguageSelector language={language} onSelect={onSelect} />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            colorScheme="green"
-            isLoading={loading}
-            onClick={runCode}
-            mt={3}>
-            Run
-          </Button>
-        </Box> */}
-
+    <Box height="100%" display="flex" flexDirection="row" overflow="hidden">
       <Box flex="1" overflow="hidden">
         <Editor
           height="100%"
@@ -151,26 +129,23 @@ const CodeEditor = forwardRef(({ doc, provider, language }, ref) => {
           defaultValue="// Select a Language"
           theme="vs-dark"
           onMount={onMount}
-          // value={value}
           onChange={(val) => setValue(val)}
         />
       </Box>
 
-
       <Box
-        height="5px"
-        bg="#444"
-        cursor={"ns-resize"}
+        width="6px"
+        bg="whiteAlpha.50"
+        cursor="ew-resize"
         onMouseDown={startResize}
-        _hover={{ bg: "blue.500" }}
+        _hover={{ bg: "accent.indigo", boxShadow: "0 0 10px rgba(99, 102, 241, 0.5)" }}
+        transition="all 0.2s"
+        zIndex={5}
       />
-      <Box height={`${outputHeight}px`} bg="#0f0a19">
+      <Box width={`${outputWidth}px`} bg="#0f0a19">
         <Output
-          // editorRef={editorRef}
-          // language={language}
           isOpen={isOutputOpen}
           logs={logs}
-        // onOpen={handleRunTrigger}
         />
       </Box>
     </Box >
