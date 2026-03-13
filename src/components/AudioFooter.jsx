@@ -1,43 +1,24 @@
-import {
-  Avatar,
-  Badge,
-  Box,
-  Flex,
-  HStack,
-  IconButton,
-  Text,
-  useToast,
-} from "@chakra-ui/react";
+import { Avatar, AvatarGroup, Box, Flex, IconButton, Text, Tooltip, Badge, VStack, HStack, Icon } from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
-import { FaMicrophone, FaMicrophoneSlash, FaPhoneSlash } from "react-icons/fa";
+import { FaMicrophone, FaMicrophoneSlash, FaPhoneSlash, FaUsers, FaCircle } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import Peer from "simple-peer";
 import { io } from "socket.io-client";
 import { SERVER_HTTP_URL } from "../config.js";
+import { motion } from "framer-motion";
 
-// Initialize socket outside component to prevent re-connections
 const socket = io(SERVER_HTTP_URL);
+const MotionBox = motion.create(Box);
 
 const AudioFooter = () => {
-  // const [me, setMe] = useState("");
-  // const [stream, setStream] = useState(null);
-  // const [receivingCall, setReceivingCall] = useState(false);
-  // const [caller, setCaller] = useState("");
-  // const [callerSignal, setCallerSignal] = useState(null);
-  // const [callAccepted, setCallAccepted] = useState(false);
-  // const [callEnded, setCallEnded] = useState(false);
-  // const [name, setName] = useState("");
-  // const [isMicMuted, setIsMicMuted] = useState(false);
-
   const { roomId } = useParams();
-  const [peers, setPeers] = useState([]); // Array of peer objects { peerID, peer }
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [currentUser, setCurrentUser] = useState({ username: "You" }); // Default
-  const [socketId, setSocketId] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState("disconnected");
+  const navigate = useNavigate();
 
-  const userStream = useRef();
+  const [currentUser, setCurrentUser] = useState({ username: "You" });
+  const [peers, setPeers] = useState([]);
+  const [isMicMuted, setIsMicMuted] = useState(false);
   const peersRef = useRef([]);
+  const userStream = useRef();
 
   useEffect(() => {
     try {
@@ -46,241 +27,101 @@ const AudioFooter = () => {
         setCurrentUser(JSON.parse(stored));
       }
     } catch (e) {
-      console.error("Could not load user", e);
+      console.error("AudioFooter:failed to parse stored user", e);
     }
   }, []);
 
-  const userAudio = useRef(); // My audio (monitor?) - usually we don't want to hear ourselves
-  const connectionRef = useRef();
-  const remoteAudioRef = useRef(); // The other person's audio
-
-  const toast = useToast();
-
-  // useEffect(() => {
-  //   // 1. Get Audio Stream
-  //   navigator.mediaDevices.getUserMedia({ video: false, audio: true }).then((currentStream) => {
-  //     setStream(currentStream);
-  //   });
-
-  //   // 2. Socket Listeners
-  //   const onMe = (id) => {
-  //     setMe(id);
-  //     console.log("My Socket ID:", id);
-  //   };
-
-  //   socket.on("me", onMe);
-
-  //   // Fallback: If socket is already connected, it might have an ID
-  //   if (socket.connected && socket.id) {
-  //     setMe(socket.id);
-  //   }
-  //   // Or if it connects later
-  //   socket.on("connect", () => {
-  //     if (socket.id) setMe(socket.id);
-  //   });
-
-  //   socket.on("callUser", (data) => {
-  //     setReceivingCall(true);
-  //     setCaller(data.from);
-  //     setName(data.name);
-  //     setCallerSignal(data.signal);
-  //     toast({
-  //       title: "Incoming Audio Call",
-  //       description: "Someone is calling you...",
-  //       status: "info",
-  //       duration: 5000,
-  //       isClosable: true,
-  //     });
-  //   });
-
-  // Cleanup
-  //   return () => {
-  //     socket.off("me", onMe);
-  //     socket.off("callUser");
-  //   };
-  // }, []);
-
-  // const callUser = (id) => {
-  //   const peer = new Peer({
-  //     initiator: true,
-  //     trickle: false,
-  //     stream: stream,
-  //   });
-
-  //   peer.on("signal", (data) => {
-  //     socket.emit("callUser", {
-  //       userToCall: id,
-  //       signalData: data,
-  //       from: me,
-  //       name: "User",
-  //     });
-  //   });
-
-  //   peer.on("stream", (remoteStream) => {
-  //     if (remoteAudioRef.current) {
-  //       remoteAudioRef.current.srcObject = remoteStream;
-  //     }
-  //   });
-
-  //   socket.on("callAccepted", (signal) => {
-  //     setCallAccepted(true);
-  //     peer.signal(signal);
-  //   });
-
-  //   connectionRef.current = peer;
-  // };
-
-  // const answerCall = () => {
-  //   setCallAccepted(true);
-  //   const peer = new Peer({
-  //     initiator: false,
-  //     trickle: false,
-  //     stream: stream,
-  //   });
-
-  //   peer.on("signal", (data) => {
-  //     socket.emit("answerCall", { signal: data, to: caller });
-  //   });
-
-  //   peer.on("stream", (remoteStream) => {
-  //     if (remoteAudioRef.current) {
-  //       remoteAudioRef.current.srcObject = remoteStream;
-  //     }
-  //   });
-
-  //   peer.signal(callerSignal);
-  //   connectionRef.current = peer;
-  // };
-
-  // const leaveCall = () => {
-  //   setCallEnded(true);
-  //   if (connectionRef.current) {
-  //     connectionRef.current.destroy();
-  //   }
-  //   // Reset state to allow new calls?
-  //   // For now, simpler to just end.
-  //   window.location.reload(); // Quick reset for MVP
-  // };
-
-  // const toggleMute = () => {
-  //   if (stream) {
-  //     stream.getAudioTracks()[0].enabled = isMicMuted; // Toggle
-  //     setIsMicMuted(!isMicMuted);
-  //   }
-  // };
-
-  /**
-   * TEMPORARY HELP: How to get the OTHER user's ID to call them?
-   * For this MVP, we might need to manually Copy/Paste, or simpler:
-   * Just rely on "waiting for call" or broadcast to room.
-   * Let's add a COPY ID button so users can share it.
-   */
   useEffect(() => {
-    let streamRef;
+    let cleanupFn;
 
-    const handleConnect = () => {
-      setSocketId(socket.id);
-      setConnectionStatus("connected");
-      socket.emit("join room", roomId);
-    };
-    const handleDisconnect = () => {
-      setConnectionStatus("disconnected");
-    };
-    const handleConnectError = (err) => {
-      console.error("Socket connect error", err);
-      setConnectionStatus("error");
-    };
-
-    const setupMediaAndSockets = async () => {
-      streamRef = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: true,
-      });
-      userStream.current = streamRef;
+    const setup = async () => {
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: true,
+        });
+      } catch (err) {
+        console.error("AudioFooter:mic acess denied", err);
+        return;
+      }
+      userStream.current = stream;
 
       const handleAllUsers = (users) => {
-        if (!socket.id) {
-          console.warn("No socket id yet; skipping all users");
-          return;
-        }
         peersRef.current.forEach((p) => p.peer.destroy());
         peersRef.current = [];
-        const nextPeers = [];
-        users.forEach((userID) => {
-          const peer = createPeer(userID, socket.id, streamRef);
-          peersRef.current.push({
-            peerID: userID,
-            peer,
+
+        const nextPeers = users
+          .filter(({ socketId }) => socketId !== socket.id)
+          .map(({ socketId, username }) => {
+            const peer = createPeer(socketId, socket.id, stream);
+            const entry = { peerID: socketId, username, peer };
+            peersRef.current.push(entry);
+            return entry;
           });
-          nextPeers.push({
-            peerID: userID,
-            peer,
-          });
-        });
+
         setPeers(nextPeers);
       };
 
-      const handleUserJoined = (payload) => {
-        const peer = addPeer(payload.signal, payload.callerID, streamRef);
-        peersRef.current.push({
-          peerID: payload.callerID,
-          peer,
-        });
-        setPeers((users) => [...users, { peerID: payload.callerID, peer }]);
+      const handleUserJoined = ({ signal, callerID, username }) => {
+        const item = peersRef.current.find((p) => p.peerID === callerID);
+        if (item) return;
+
+        const peer = addPeer(signal, callerID, stream);
+        const entry = { peerID: callerID, username, peer };
+        peersRef.current.push(entry);
+        setPeers((prev) => [...prev, entry]);
       };
 
-      const handleReturnSignal = (payload) => {
-        const item = peersRef.current.find((p) => p.peerID === payload.id);
-        if (item) {
-          item.peer.signal(payload.signal);
-        }
+      const handleReturnSignal = ({ id, signal }) => {
+        const item = peersRef.current.find((p) => p.peerID === id);
+        if (item) item.peer.signal(signal);
       };
 
-      const handleUserLeft = (id) => {
-        const peerObj = peersRef.current.find((p) => p.peerID === id);
-        if (peerObj) peerObj.peer.destroy();
-        peersRef.current = peersRef.current.filter((p) => p.peerID !== id);
-        setPeers((users) => users.filter((p) => p.peerID !== id));
+      const handleUserLeft = (socketId) => {
+        const entry = peersRef.current.find((p) => p.peerID === socketId);
+        if (entry) entry.peer.destroy();
+        peersRef.current = peersRef.current.filter(
+          (p) => p.peerID !== socketId,
+        );
+        setPeers((prev) => prev.filter((p) => p.peerID !== socketId));
       };
 
-      // register handlers
       socket.on("all users", handleAllUsers);
       socket.on("user joined", handleUserJoined);
       socket.on("receiving returned signal", handleReturnSignal);
       socket.on("user left", handleUserLeft);
-      socket.on("disconnect", handleDisconnect);
-      socket.on("connect_error", handleConnectError);
 
-      // initiate join (after handlers ready)
-      if (socket.connected && socket.id) {
-        handleConnect();
-      }
-      socket.on("connect", handleConnect);
+      const username = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("user"))?.username || "Guest";
+        } catch {
+          return "Guest";
+        }
+      })();
 
-      return () => {
+      socket.emit("join room", { roomId, username });
+
+      cleanupFn = () => {
         socket.off("all users", handleAllUsers);
         socket.off("user joined", handleUserJoined);
         socket.off("receiving returned signal", handleReturnSignal);
         socket.off("user left", handleUserLeft);
-        socket.off("connect", handleConnect);
-        socket.off("disconnect", handleDisconnect);
-        socket.off("connect_error", handleConnectError);
+
         peersRef.current.forEach((p) => p.peer.destroy());
         peersRef.current = [];
         setPeers([]);
-        if (streamRef) {
-          streamRef.getTracks().forEach((t) => t.stop());
+
+        if (userStream.current) {
+          userStream.current.getTracks().forEach((t) => t.stop());
+          userStream.current = null;
         }
       };
     };
-
-    setupMediaAndSockets();
+    setup();
 
     return () => {
-      // cleanup happens in setupMediaAndSockets returned function if it ran
-      if (streamRef) {
-        streamRef.getTracks().forEach((t) => t.stop());
-      }
+      if (cleanupFn) cleanupFn();
     };
   }, [roomId]);
 
@@ -290,125 +131,187 @@ const AudioFooter = () => {
       trickle: false,
       stream,
     });
+
     peer.on("signal", (signal) => {
       socket.emit("sending signal", { userToSignal, callerID, signal });
     });
+
+    peer.on("error", (err) => {
+      console.error("AudioFooter:peer error (initiator)", err);
+    });
+
     return peer;
   }
-  // Helper: Accept call from new guy
+
   function addPeer(incomingSignal, callerID, stream) {
     const peer = new Peer({
       initiator: false,
       trickle: false,
       stream,
     });
+
     peer.on("signal", (signal) => {
       socket.emit("returning signal", { signal, callerID });
     });
+
+    peer.on("error", (err) => {
+      console.error("AudioFooter:peer error (receiver)", err);
+    });
+
     peer.signal(incomingSignal);
+
     return peer;
   }
 
   const toggleMute = () => {
-    if (userStream.current) {
-      userStream.current.getAudioTracks()[0].enabled = isMicMuted;
-      setIsMicMuted(!isMicMuted);
-    }
-  };
+    if (!userStream.current) return;
+    const track = userStream.current.getAudioTracks()[0];
+    if (!track) return;
 
-  const navigate = useNavigate();
+    track.enabled = isMicMuted;
+    setIsMicMuted((m) => !m);
+  };
 
   const leaveRoom = () => {
     if (userStream.current) {
-      userStream.current.getTracks().forEach((track) => track.stop());
+      userStream.current.getTracks().forEach((t) => t.stop());
     }
-
     navigate("/");
-    window.location.reload();
   };
 
   return (
-    <Box
-      className="footer"
-      bg="gray.900"
-      borderTop="1px solid"
-      borderColor="gray.700"
-      px={4}
-      h="13vh">
-      {/* Hidden Audio Element for Remote Stream */}
-      {/* <audio ref={remoteAudioRef} autoPlay /> */}
+    <MotionBox
+      initial={{ y: 100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      position="fixed"
+      bottom="24px"
+      left="0"
+      right="0"
+      mx="auto"
+      zIndex={1000}
+      px={10}
+      py={4}
+      bg="rgba(10, 10, 30, 0.85)"
+      backdropFilter="blur(25px)"
+      borderRadius="full"
+      border="1px solid"
+      borderColor="accent.indigo"
+      boxShadow="0 15px 40px rgba(0,0,0,0.6)"
+      width="fit-content"
+      minW={{ base: "90%", md: "700px" }}
+    >
+      <Flex alignItems="center" justifyContent="space-between" width="100%">
+        {/* User Info Section */}
+        <Flex alignItems="center" gap={4} flex="1">
+          <Box position="relative">
+            <Avatar
+              size="sm"
+              name={currentUser.username}
+              bgGradient="linear(to-br, accent.indigo, accent.violet)"
+              color="white"
+            />
+            <Icon
+              as={FaCircle}
+              position="absolute"
+              bottom="-1px"
+              right="-1px"
+              color={isMicMuted ? "red.500" : "green.400"}
+              boxSize="10px"
+              border="2px solid"
+              borderColor="gray.900"
+            />
+          </Box>
+          <VStack align="start" spacing={0}>
+            <Text fontWeight="bold" fontSize="xs" color="white" letterSpacing="widest" textTransform="uppercase">
+              {currentUser.username}
+            </Text>
+            <HStack spacing={1}>
+              <Icon as={FaCircle} boxSize="6px" color="green.400" />
+              <Text fontSize="9px" color="whiteAlpha.600" fontWeight="medium">Voice Connected</Text>
+            </HStack>
+          </VStack>
+        </Flex>
 
-      <Flex h="100%" alignItems="center">
-        {/* Left: My Profile */}
-        <Box flex="1" display="flex" justifyContent="flex-start">
-          <HStack spacing={3}>
-            <Avatar size="sm" name={currentUser.username || "You"} />
-            <Box>
-              <Text color="white" fontWeight="bold" fontSize="sm">
-                {currentUser.username || "You"}
-              </Text>
-              <Badge
-                colorScheme={peers.length > 0 ? "green" : "gray"}
-                fontSize="xs">
-                {peers.length} Others
-              </Badge>
-            </Box>
-          </HStack>
-        </Box>
-
-        {/* Center: Controls */}
-        <Box display="flex" justifyContent="center">
-          <HStack spacing={8}>
+        {/* Central Controls SECTION - Centered */}
+        <Flex gap={5} alignItems="center" justifyContent="center">
+          <Tooltip label={isMicMuted ? "Power On Mic" : "Mute Session"} placement="top" hasArrow>
             <IconButton
-              isRound
-              size="lg"
+              aria-label="Toggle Mic"
               icon={isMicMuted ? <FaMicrophoneSlash /> : <FaMicrophone />}
-              colorScheme={isMicMuted ? "red" : "gray"}
               onClick={toggleMute}
-            />
-
-            <IconButton
+              variant={isMicMuted ? "solid" : "glass"}
+              colorScheme={isMicMuted ? "red" : "whiteAlpha"}
               isRound
               size="lg"
-              icon={<FaPhoneSlash />}
-              colorScheme="red"
-              onClick={leaveRoom}
+              boxShadow={!isMicMuted ? "0 0 15px rgba(255,255,255,0.1)" : "none"}
+              _hover={{ transform: "translateY(-4px) scale(1.1)", bg: isMicMuted ? "red.600" : "whiteAlpha.300" }}
+              transition="all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
             />
-          </HStack>
-        </Box>
+          </Tooltip>
 
-        {/* Right: Participants list */}
-        <Box flex="1" display="flex" justifyContent="flex-end">
-          <HStack spacing={2} alignItems="center">
-            {/* Current user */}
-            <Badge colorScheme="blue" fontSize="xs">
-              {currentUser.username || "You"}
-            </Badge>
-            {/* Other peers in the meeting */}
-            {peers.map((p, index) => (
-              <Badge key={p.peerID || index} colorScheme="purple" fontSize="xs">
-                User {index + 1}
-              </Badge>
-            ))}
-          </HStack>
-        </Box>
+          <Tooltip label="Leave Workspace" placement="top" hasArrow>
+            <IconButton
+              aria-label="Exit"
+              icon={<FaPhoneSlash />}
+              onClick={leaveRoom}
+              variant="outline"
+              colorScheme="red"
+              borderColor="red.500"
+              color="red.400"
+              isRound
+              size="lg"
+              _hover={{ bg: "red.500", color: "white", transform: "translateY(-4px) scale(1.1)", boxShadow: "0 0 20px rgba(239, 68, 68, 0.4)" }}
+              transition="all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+            />
+          </Tooltip>
+        </Flex>
+
+        {/* Right Section - Collaborators */}
+        <Flex alignItems="center" gap={6} flex="1" justifyContent="flex-end">
+          <Divider orientation="vertical" height="30px" borderColor="whiteAlpha.200" />
+          <VStack align="end" spacing={1}>
+            <HStack spacing={2} color="accent.indigo">
+              <Icon as={FaUsers} boxSize="12px" />
+              <Text fontSize="10px" fontWeight="bold" letterSpacing="widest" textTransform="uppercase">
+                Network
+              </Text>
+            </HStack>
+            <AvatarGroup size="xs" max={4} spacing={-2}>
+              {peers.map((p) => (
+                <Tooltip key={p.peerID} label={p.username} placement="top" hasArrow>
+                  <Avatar name={p.username} border="2px solid" borderColor="gray.900" />
+                </Tooltip>
+              ))}
+            </AvatarGroup>
+          </VStack>
+        </Flex>
       </Flex>
 
-      {peers.map((p, index) => {
-        return <AudioPlayer key={index} peer={p.peer} />;
-      })}
-    </Box>
+      {peers.map((p) => (
+        <AudioPlayer key={p.peerID} peer={p.peer} />
+      ))}
+    </MotionBox>
   );
 };
 
-const AudioPlayer = ({ peer }) => {
-  const ref = useRef();
+const Divider = ({ orientation = "horizontal", height, borderColor }) => (
+  <Box
+    w={orientation === "horizontal" ? "100%" : "1px"}
+    h={orientation === "vertical" ? height : "1px"}
+    bg={borderColor}
+  />
+);
 
+const AudioPlayer = ({ peer }) => {
+  const audioRef = useRef();
   useEffect(() => {
-    peer.on("stream", (stream) => {
-      ref.current.srcObject = stream;
+    peer.on("stream", (remoteStream) => {
+      if (audioRef.current) {
+        audioRef.current.srcObject = remoteStream;
+      }
     });
-  }, []);
-  return <audio playsInline autoPlay ref={ref} />;
+  }, [peer]);
+  return <audio playsInline autoPlay ref={audioRef} />;
 };
+
 export default AudioFooter;
