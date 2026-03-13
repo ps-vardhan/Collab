@@ -6,13 +6,10 @@ const http = require("http");
 const WebSocket = require("ws");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const Y = require("yjs");
 const authRoutes = require("./routes/auth");
 const roomRoutes = require("./routes/rooms");
 
 const { setupWSConnection } = require("./utils");
-// const { MongodbPersistance } = require("y-mongodb-provider");
-// const { setPersistance, setupWSConnection } = require("y-websocket/bin/utils");
 
 dotenv.config();
 
@@ -31,30 +28,7 @@ mongoose
   .then(() => console.log("MongoDb Connected"))
   .catch((err) => console.error("MongoDb Connection Error:", err));
 
-// const mdb = new MongodbPersistance(
-//   process.env.MONGO_URI || "mongodb://localhost:27017/collaborative-editor",
-//   {
-//     collectionName: "yjs-transactions",
-//     flushSize: 100,
-//     multipleCollections: true,
-//   }
-// );
-
-// setPersistance({
-//   bindState: async (DocumentFragment, ydoc) => {
-//     const persistedYdoc = await mdb.getYDoc(docName);
-//     const newUpdates = Y.encodeStateAsUpdate(ydoc);
-//     mdb.storeUpdate(docName, newUpdates);
-
-//     Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc));
-//   },
-//   writeState: async (docName, ydoc) => {
-//     await mdb.storeUpdate(docName, Y.encodeStateAsUpdate(ydoc));
-//   },
-// });
-
 app.get("/api/token", async (req, res) => {
-  // res.send("Collaborative Text Editor Server is Running");
   const room = req.query.room;
   const userName = req.query.username || "Guest";
   try {
@@ -74,5 +48,5 @@ wss.on("connection", (conn, req) => {
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
