@@ -3,39 +3,34 @@ const router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const requireAuth = require("../middleware/auth");
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+
+if (!process.env.JWT_SECRET) {
   console.error("FATAL: JWT_SECRET is not set in environment variables.");
   process.exit(1);
 }
 
-const validateAuthInput = (username, password) => {
-  if (!username || !username.trim()) return "Username is required.";
-  if (username.trim().length < 3) return "Username must be atleast 3 characters.";
-  if (!password) return "Password is required.";
-  if (password.length < 6) return "Password must be atleast 6 characters.";
-  return null;
-}
 
 router.post("/register", async (req, res) => {
   const { username, password } = req.body;
 
-  const validationError = validateAuthInput(username, password);
-  if (validationError) return res.status(400).json({ msg: validationError });
+  if (!username?.trim() || username.trim().length < 3)
+    return res.status(400).json({ msg: "Username must be atleast3 characters." });
+
+  if (!password || password.length < 6)
+    return res.status(400).json({ msg: "Password must be atleast 6 characters." });
+
 
   try {
-    const existingUser = await User.findOne({ username: username.trim() });
-    if (existingUser)
-      return res.status(400).json({ msg: "User already exists" });
+    const exists = await User.findOne({ username: username.trim() });
+    if (exists)
+      return res.status(409).json({ msg: "Username already taken." });
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hash = await bcrypt.hash(password, 10);
+    const user = new User.create({ username: username.trim(), password: hash });
 
-    const newUser = new User({ username: username.trim(), password: hashedPassword });
-    await newUser.save();
-
-    res.json({ msg: "User registered successfully" });
+    res.status(201).json({ msg: "User registered successfully.", user });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -44,32 +39,34 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const validationError = validateAuthInput(username, password);
-  if (validationError) return res.status(400).json({ msg: validationError });
+  if (!username?.trim() || !password)
+    return res.status(400).json({ msg: "Username and password are required." });
 
   try {
-    const user = await User.findOne({ username: username.trim() });
-    if (!user) return res.status(400).json({ msg: "User does not exist" });
+    const user = await User.findOne({ username: username.trim() }).select("+password");
+
+    if (!user) return res.status(401).json({ msg: "Invalid credentials." });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ msg: "Invalid credentials" });
 
     const token = jwt.sign(
       { id: user._id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: "1h" }
+      process.env.JWT_SECRET,
+      { expiresIn: "8h" }
     );
+
     res.json({ token, user: { id: user._id, username: user.username } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get("/user/:username", async (req, res) => {
+router.get("/me", requireAuth, async (req, res) => {
   try {
-    const user = await User.findOne({ username: req.params.username });
+    const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ msg: "User not found" });
-    res.json({ id: user._id, username: user.username });
+    res.json(user);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
