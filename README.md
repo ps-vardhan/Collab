@@ -9,7 +9,7 @@ A high-performance, unified engineering workspace that integrates **real-time co
 
 ---
 
-## 📽️ Project Showcase
+## Project Showcase
 
 > [!TIP]
 > This platform is designed for teams who need more than just a code editor. It's a complete ecosystem for technical brainstorming, live pairing, and architectural planning.
