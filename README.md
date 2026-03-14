@@ -14,13 +14,6 @@ A high-performance, unified engineering workspace that integrates **real-time co
 > [!TIP]
 > This platform is designed for teams who need more than just a code editor. It's a complete ecosystem for technical brainstorming, live pairing, and architectural planning.
 
-<!-- VIDEO SPACE START -->
-
-![Project Demo Placeholder](https://via.placeholder.com/1280x720.png?text=Demonstration+Video+Placement)
-_Video demonstration can be found in `/public/assets/videos/demo.mp4`_
-
-<!-- VIDEO SPACE END -->
-
 ---
 
 ## Core Capabilities
